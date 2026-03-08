@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount persistent storage for ChromaDB and trained models
+      # so they survive container restarts / rebuilds
+      - ./db:/app/db
+      - ./models:/app/models
+    environment:
+      # Tune these without rebuilding the image
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - N_CLUSTERS=15
+      - CACHE_SIMILARITY_THRESHOLD=0.85
+      - CACHE_CLUSTER_SEARCH_DEPTH=2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: run the ingestion pipeline as a one-shot init container
+  # Uncomment and run: docker-compose run --rm ingest
+  ingest:
+    build: .
+    volumes:
+      - ./db:/app/db
+      - ./models:/app/models
+      - ./data:/app/data
+    command: ["python", "scripts/ingest.py"]
+    profiles: ["tools"]
+
+  cluster:
+    build: .
+    volumes:
+      - ./db:/app/db
+      - ./models:/app/models
+    command: ["python", "scripts/cluster.py"]
+    profiles: ["tools"]
